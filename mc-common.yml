@@ -1,0 +1,54 @@
+services:
+  mc:
+    image: itzg/minecraft-server
+    hostname: ${RCON_HOST:-mc}
+    ports:
+      # expose the Minecraft server port outside of container
+      - ${PORT:-25565}:25565
+    networks:
+      minecraft-net:
+    dns:
+      - 1.1.1.1
+    environment:
+      ENFORCE_WHITELIST: "true"
+      EULA: "true"
+      OVERRIDE_SERVER_PROPERTIES: "true"
+      LEVEL: ${WORLD_NAME:-world}
+      TZ: "Europe/Brussels"
+      RCON_PASSWORD: ${RCON_PASSWORD}
+    restart: unless-stopped
+    volumes:
+      # use a named, managed volume for data volume
+      - data:/data
+
+  mc-backup:
+    image: itzg/mc-backup
+    environment:
+      BACKUP_METHOD: "restic"
+      BACKUP_NAME: ${WORLD_NAME:-world}
+      INITIAL_DELAY: ${INITIAL_DELAY:-5m}
+      BACKUP_INTERVAL: ${BACKUP_INTERVAL:-12h}
+      PAUSE_IF_NO_PLAYERS: true
+      PRUNE_BACKUPS_DAYS: ${PRUNE_BACKUPS_DAYS:-7}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      RESTIC_HOSTNAME: ${RCON_HOST:-mc}-backup
+      RESTIC_REPOSITORY: ${RESTIC_REPOSITORY:-s3:http://minio:9000/minecraft/Backups}
+      RESTIC_PASSWORD: ${RESTIC_PASSWORD}
+      RESTIC_ADDITIONAL_TAGS: ${RESTIC_ADDITIONAL_TAGS:-mc}
+      PRUNE_RESTIC_RETENTION: ${PRUNE_RESTIC_RETENTION:- -l 5 -d 7 -w 5 -y 2}
+      LINK_LATEST: "true"
+      EXCLUDES: "*.jar,*.log,cache,logs"
+      TZ: "Europe/Brussels"
+      # instead of network_mode below, could declare RCON_HOST
+      RCON_HOST: ${RCON_HOST:-mc}
+      RCON_PASSWORD: ${RCON_PASSWORD}
+    restart: unless-stopped
+
+    networks:
+      minecraft-net:
+
+    volumes:
+      # mount the same volume used by server, but read-only
+      - data:/data
+      - restore:/restore

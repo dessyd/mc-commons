@@ -24,48 +24,62 @@ services:
       # use a named, managed volume for data volume
       - data:/data
 
-  # "init" container for mc to restore the data volume when empty
+  # # "init" container for mc to restore the data volume when empty
+  # restore-backup:
+  #   # Same image as mc, but any base image with bash and tar will work
+  #   image: itzg/mc-backup
+  #   restart: "no"
+  #   entrypoint: restore-tar-backup
+  #   environment:
+  #     DEBUG: TRUE
+  #   volumes:
+  #     # Must be same mount as mc service, needs to be writable
+  #     - data:/data
   restore-backup:
-    # Same image as mc, but any base image with bash and tar will work
-    image: itzg/mc-backup
-    restart: "no"
-    entrypoint: restore-tar-backup
+    build: restic-app/
+    restart: no
     environment:
-      UID: 1027
-      GID: 100
       DEBUG: TRUE
+      RCON_HOST:
+      WORLD_NAME:
+      RESTIC_PASSWORD:
+      AWS_ACCESS_KEY_ID:
+      AWS_SECRET_ACCESS_KEY:
     volumes:
       # Must be same mount as mc service, needs to be writable
       - data:/data
-
+      
   mc-backup:
     image: itzg/mc-backup
+    hostname: ${RCON_HOST:-mc}-backup
     networks:
       minecraft-net:
     depends_on:
       mc:
         condition: service_healthy
     environment:
-      UID: 1027
-      GID: 100
-      BACKUP_NAME: ${WORLD_NAME:-world}
-      INITIAL_DELAY: ${INITIAL_DELAY:-5m}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-europe-west1}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       BACKUP_INTERVAL: ${BACKUP_INTERVAL:-12h}
-      PAUSE_IF_NO_PLAYERS: true
-      PRUNE_BACKUPS_DAYS: ${PRUNE_BACKUPS_DAYS:-7}
-      PRUNE_BACKUPS_COUNT: ${PRUNE_BACKUPS_COUNT:-14}
-      LINK_LATEST: "true"
+      BACKUP_METHOD: restic
+      BACKUP_NAME: ${WORLD_NAME:-world}
       EXCLUDES: "*.jar,*.log,cache,logs"
+      INITIAL_DELAY: ${INITIAL_DELAY:-1m}
+      LINK_LATEST: "true"
+      PAUSE_IF_NO_PLAYERS: false
+      PRUNE_BACKUPS_COUNT: ${PRUNE_BACKUPS_COUNT:-14}
+      PRUNE_BACKUPS_DAYS: ${PRUNE_BACKUPS_DAYS:-7}
+      PRUNE_RESTIC_RETENTION: --keep-within-daily 7d
       RCON_HOST: ${RCON_HOST:-mc}
-      PRE_BACKUP_SCRIPT: |
-        echo "Before backup!"
-        echo "Also before backup from $$RCON_HOST to $$DEST_DIR"
-      POST_BACKUP_SCRIPT_FILE: /post-backup.sh
+      RCON_PASSWORD: ${RCON_PASSWORD}
+      RESTIC_ADDITIONAL_TAGS: ${RCON_HOST}
+      RESTIC_PASSWORD: ${RESTIC_PASSWORD}
+      RESTIC_REPOSITORY: "s3:http://192.168.1.15:9000/minecraft/${RCON_HOST:-mc}"
       TZ: "Etc/UTC"
     volumes:
       # mount the same volume used by server, but read-only
       - data:/data
-      - ./scripts/post-backup.sh:/post-backup.sh:ro
 
   uf1:
     networks:
